@@ -18,7 +18,7 @@
 ```json
 {
   _id: ObjectId,
-  role_id: ObjectId, // Reference to roles._id
+  role_id: ObjectId, 
   full_name: String,
   email: String,
   password: String,
