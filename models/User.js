@@ -10,6 +10,7 @@ const UserSchema = new mongoose.Schema({
   is_verified: { type: Boolean, default: false },
   celebrity_type: { type: String, default: null },
   about: { type: String, default: null },
+  favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   createdAt: Date,
   updatedAt: Date
 });

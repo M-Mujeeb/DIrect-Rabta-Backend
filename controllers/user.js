@@ -5,6 +5,8 @@ const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const sendEmail = require("../utils/sendEmail");
 const { generateToken } = require("../utils/jwt");
+const fs = require("fs");
+const path = require("path");
 
 module.exports = {
   addUser: async (req, res) => {
@@ -127,13 +129,17 @@ module.exports = {
 
       const token = generateToken({ id: user._id, role: user.role_id?.name });
 
+      const BASE_URL = process.env.BASE_URL
+
       return successResponse(res, "Login successful", { 
         user: {
           id: user._id,
           email: user.email,
           name: user.name,
           role: user.role_id?.name,
-          profile_img: user.profile_image || ""
+          profile_img: user.profile_image
+                      ? `${BASE_URL}${user.profile_image}`
+                      : "",
         },
         token 
       });
@@ -231,36 +237,174 @@ module.exports = {
     }
   },
 
-  updateProfile: async (req, res) => {
+ updateProfile: async (req, res) => {
     try {
-      const userId = req.user.id; 
-      const updateData = req.body;
+      const userId = req.user.id;
+      const { name } = req.body;
+      const BASE_URL = process.env.BASE_URL;
 
-      const user = await Users.findByIdAndUpdate(
-        userId,
-        { ...updateData, updatedAt: new Date() },
-        { new: true }
-      );
+      const user = await Users.findById(userId);
+      if (!user) return errorResponse(res, "User not found", 404);
 
-      if (!user) {
-        return errorResponse(res, "User not found", 404);
+      let updateData = { updatedAt: new Date() };
+
+      if (name) updateData.name = name;
+
+      if (req.file) {
+
+        if (user.profile_image) {
+          const oldImagePath = path.join(__dirname, "..", user.profile_image);
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlinkSync(oldImagePath);
+          }
+        }
+
+        updateData.profile_image = `/uploads/${req.file.filename}`;
       }
 
-      return successResponse(res, "Profile updated successfully", { user });
+      const updatedUser = await Users.findByIdAndUpdate(userId, updateData, {
+        new: true,
+      });
+
+      return successResponse(res, "Profile updated successfully", {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        profile_image: updatedUser.profile_image
+          ? `${BASE_URL}${updatedUser.profile_image}`
+          : "",
+      });
     } catch (error) {
       console.error("Update Profile Error:", error);
       return errorResponse(res, "Failed to update profile", 500);
     }
   },
 
-  userArtists: async (req, res) => {
+  changePassword: async (req, res) => {
     try {
-      // This function should handle getting user's preferred artists
-      // Implementation depends on your data model
-      return successResponse(res, "User artists retrieved successfully");
+      const userId = req.user.id;
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        return errorResponse(res, "Both current and new passwords are required", 400);
+      }
+
+      const user = await Users.findById(userId);
+      if (!user) return errorResponse(res, "User not found", 404);
+
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        return errorResponse(res, "Current password is incorrect", 401);
+      }
+
+      const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+      user.password = hashedNewPassword;
+      user.updatedAt = new Date();
+      await user.save();
+
+      return successResponse(res, "Password changed successfully");
     } catch (error) {
-      console.error("User Artists Error:", error);
-      return errorResponse(res, "Failed to get user artists", 500);
+      console.error("Change Password Error:", error);
+      return errorResponse(res, "Failed to change password", 500);
+    }
+  },
+
+  deleteAccount: async (req, res) => {
+    try {
+      const userId = req.user.id;
+
+      const user = await Users.findById(userId);
+      if (!user) {
+        return errorResponse(res, "User not found", 404);
+      }
+
+      // Delete profile image from disk (if exists)
+      if (user.profile_image) {
+        const imagePath = path.join(__dirname, "..", user.profile_image);
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath);
+        }
+      }
+
+      await Users.findByIdAndDelete(userId);
+
+      return successResponse(res, "Account deleted successfully");
+    } catch (error) {
+      console.error("Delete Account Error:", error);
+      return errorResponse(res, "Failed to delete account", 500);
+    }
+  },
+
+   toggleFavoriteCelebrity: async (req, res) => {
+    try {
+      const fanId = req.user.id;
+      const { celebrityId } = req.body;
+
+      const fan = await Users.findById(fanId);
+      const celebrity = await Users.findById(celebrityId);
+
+      if (!fan || !celebrity || celebrity.role_id.toString() === fan.role_id.toString()) {
+        return errorResponse(res, "Invalid fan or celebrity", 400);
+      }
+
+      const isFavorited = fan.favorites?.includes(celebrityId);
+
+      const update = isFavorited
+        ? { $pull: { favorites: celebrityId } }
+        : { $addToSet: { favorites: celebrityId } };
+
+      await Users.findByIdAndUpdate(fanId, update, { new: true });
+
+      return successResponse(res, isFavorited ? "Removed from favorites" : "Added to favorites");
+    } catch (err) {
+      console.error("Toggle Favorite Error:", err);
+      return errorResponse(res, "Failed to toggle favorite", 500);
+    }
+  },
+
+  getFavoriteCelebrities: async (req, res) => {
+    try {
+      const fan = await Users.findById(req.user.id)
+        .populate("favorites", "name profile_image celebrity_type about");
+
+      if (!fan) return errorResponse(res, "User not found", 404);
+
+      return successResponse(res, "Favorite celebrities fetched", fan.favorites);
+    } catch (err) {
+      console.error("Get Favorites Error:", err);
+      return errorResponse(res, "Failed to fetch favorites", 500);
+    }
+  },
+
+  getAllCelebrities: async (req, res) => {
+    try {
+      // Step 1: Find the role document
+      const celebrityRole = await Role.findOne({ name: "celebrity" });
+      if (!celebrityRole) {
+        return errorResponse(res, "Celebrity role not found", 404);
+      }
+
+      // Step 2: Use role_id to query users
+      const celebrities = await Users.find({ role_id: celebrityRole._id })
+        .select("name profile_image celebrity_type about");
+
+      const BASE_URL = process.env.BASE_URL;
+
+      const formatted = celebrities.map(c => ({
+        id: c._id,
+        name: c.name,
+        celebrity_type: c.celebrity_type,
+        about: c.about,
+        profile_image: c.profile_image ? `${BASE_URL}${c.profile_image}` : ""
+      }));
+
+      return successResponse(res, "Celebrities fetched successfully", formatted);
+    } catch (error) {
+      console.error("Get Celebrities Error:", error);
+      return errorResponse(res, "Failed to fetch celebrities", 500);
     }
   }
+
+
+
 };
