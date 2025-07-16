@@ -1,5 +1,8 @@
 const Users = require("../models/User");
 const Role = require("../models/Role");
+const Payment = require("../models/Payment");
+const Plan = require("../models/Plan");
+
 const { successResponse, errorResponse } = require("../utils/response");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
@@ -335,76 +338,54 @@ module.exports = {
     }
   },
 
-   toggleFavoriteCelebrity: async (req, res) => {
-    try {
-      const fanId = req.user.id;
-      const { celebrityId } = req.body;
+  getPaymentHistory: async (req, res) => {
+  try {
+    const fanId = req.user.id;
 
-      const fan = await Users.findById(fanId);
-      const celebrity = await Users.findById(celebrityId);
+    // Validate user role
+    const user = await Users.findById(fanId).populate("role_id");
+    if (!user || user.role_id.name !== "fan") {
+      return errorResponse(res, "Only fans can access payment history", 403);
+    }
 
-      if (!fan || !celebrity || celebrity.role_id.toString() === fan.role_id.toString()) {
-        return errorResponse(res, "Invalid fan or celebrity", 400);
+    // Fetch payments with plan info
+    const payments = await Payment.find({ user_id: fanId })
+      .sort({ paid_at: -1 })
+      .populate("plan_id", "name") // only plan name needed
+      .lean();
+
+    // Group payments by recency
+    const now = new Date();
+    const last7Days = [];
+    const lastMonth = [];
+
+    for (const p of payments) {
+      const daysDiff = Math.floor((now - new Date(p.paid_at)) / (1000 * 60 * 60 * 24));
+      const formatted = {
+        amount: p.amount,
+        plan_name: p.plan_id?.name || "Plan",
+        paid_at: p.paid_at,
+        currency: p.currency,
+        transaction_id: p.transaction_id
+      };
+
+      if (daysDiff <= 7) {
+        last7Days.push(formatted);
+      } else {
+        lastMonth.push(formatted);
       }
-
-      const isFavorited = fan.favorites?.includes(celebrityId);
-
-      const update = isFavorited
-        ? { $pull: { favorites: celebrityId } }
-        : { $addToSet: { favorites: celebrityId } };
-
-      await Users.findByIdAndUpdate(fanId, update, { new: true });
-
-      return successResponse(res, isFavorited ? "Removed from favorites" : "Added to favorites");
-    } catch (err) {
-      console.error("Toggle Favorite Error:", err);
-      return errorResponse(res, "Failed to toggle favorite", 500);
     }
-  },
 
-  getFavoriteCelebrities: async (req, res) => {
-    try {
-      const fan = await Users.findById(req.user.id)
-        .populate("favorites", "name profile_image celebrity_type about");
+    return successResponse(res, "Payment history fetched", {
+      last7Days,
+      lastMonth
+    });
 
-      if (!fan) return errorResponse(res, "User not found", 404);
-
-      return successResponse(res, "Favorite celebrities fetched", fan.favorites);
-    } catch (err) {
-      console.error("Get Favorites Error:", err);
-      return errorResponse(res, "Failed to fetch favorites", 500);
-    }
-  },
-
-  getAllCelebrities: async (req, res) => {
-    try {
-      // Step 1: Find the role document
-      const celebrityRole = await Role.findOne({ name: "celebrity" });
-      if (!celebrityRole) {
-        return errorResponse(res, "Celebrity role not found", 404);
-      }
-
-      // Step 2: Use role_id to query users
-      const celebrities = await Users.find({ role_id: celebrityRole._id })
-        .select("name profile_image celebrity_type about");
-
-      const BASE_URL = process.env.BASE_URL;
-
-      const formatted = celebrities.map(c => ({
-        id: c._id,
-        name: c.name,
-        celebrity_type: c.celebrity_type,
-        about: c.about,
-        profile_image: c.profile_image ? `${BASE_URL}${c.profile_image}` : ""
-      }));
-
-      return successResponse(res, "Celebrities fetched successfully", formatted);
-    } catch (error) {
-      console.error("Get Celebrities Error:", error);
-      return errorResponse(res, "Failed to fetch celebrities", 500);
-    }
+  } catch (err) {
+    console.error("Payment history error:", err);
+    return errorResponse(res, "Failed to fetch payment history", 500);
   }
-
+}
 
 
 };
