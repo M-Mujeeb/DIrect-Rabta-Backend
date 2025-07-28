@@ -37,7 +37,10 @@ module.exports = {
         .populate("favorites", "name profile_image celebrity_type about");
 
       if (!fan) return errorResponse(res, "User not found", 404);
-
+      const BASE_URL = process.env.BASE_URL || "http://localhost:4000";
+      fan.favorites.forEach(favorite => {
+        favorite.profile_image = `${BASE_URL}${favorite.profile_image}`;
+      });
       return successResponse(res, "Favorite celebrities fetched", fan.favorites);
     } catch (err) {
       console.error("Get Favorites Error:", err);
