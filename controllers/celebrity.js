@@ -13,6 +13,11 @@ module.exports = {
         return errorResponse(res, "Celebrity role not found", 404);
       }
 
+      const fan = await Users.findById(fanId).select("favorites");
+      if (!fan) {
+        return errorResponse(res, "User not found", 404);
+      }
+
       const celebrities = await Users.find({ role_id: celebrityRole._id })
         .select("name profile_image celebrity_type about");
 
@@ -23,7 +28,8 @@ module.exports = {
         name: c.name,
         celebrity_type: c.celebrity_type,
         about: c.about,
-        profile_image: c.profile_image ? `${BASE_URL}${c.profile_image}` : ""
+        profile_image: c.profile_image ? `${BASE_URL}${c.profile_image}` : "",
+       is_favourite: fan.favorites?.includes(c._id.toString()) || false
       }));
 
       return successResponse(res, "Celebrities fetched successfully", formatted);
