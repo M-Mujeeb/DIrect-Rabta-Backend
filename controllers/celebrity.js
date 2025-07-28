@@ -8,6 +8,7 @@ const { successResponse, errorResponse } = require("../utils/response");
 module.exports = {
   getAllCelebrities: async (req, res) => {
     try {
+      const fanId = req.user.id;
       const celebrityRole = await Role.findOne({ name: "celebrity" });
       if (!celebrityRole) {
         return errorResponse(res, "Celebrity role not found", 404);
