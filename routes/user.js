@@ -26,4 +26,7 @@ router.post("/change-password", authPolicy, controller.changePassword);
 router.delete("/delete-account", authPolicy, controller.deleteAccount);
 router.get("/payment-history", authPolicy, controller.getPaymentHistory);
 
+// For testing
+router.post("/increase-limit", authPolicy, controller.increaseLimit);
+
 module.exports = router;

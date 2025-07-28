@@ -2,6 +2,7 @@ const Users = require("../models/User");
 const Role = require("../models/Role");
 const Payment = require("../models/Payment");
 const Plan = require("../models/Plan");
+const UserPlan = require("../models/UserPlan");
 
 const { successResponse, errorResponse } = require("../utils/response");
 const bcrypt = require("bcryptjs");
@@ -384,6 +385,33 @@ module.exports = {
   } catch (err) {
     console.error("Payment history error:", err);
     return errorResponse(res, "Failed to fetch payment history", 500);
+  }
+},
+
+increaseLimit: async (req, res) => {
+  try {
+    const { count } = req.body;
+    const userId = req.user.id;
+
+    // Validate count
+    if (!count || typeof count !== "number" || count <= 0) {
+      return errorResponse(res, "Invalid count provided", 400);
+    }
+
+    const userPlan = await UserPlan.findOneAndUpdate(
+      { user_id: userId },
+      { $inc: { remaining_messages: count } },
+      { new: true, runValidators: true }
+    );
+
+    if (!userPlan) {
+      return errorResponse(res, "User plan not found", 404);
+    }
+
+    return successResponse(res, "Limit increased successfully", userPlan);
+  } catch (err) {
+    console.error("Increase limit error:", err);
+    return errorResponse(res, "Failed to increase limit", 500);
   }
 }
 
