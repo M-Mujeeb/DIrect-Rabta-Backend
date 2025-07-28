@@ -19,7 +19,7 @@ module.exports = {
       const BASE_URL = process.env.BASE_URL;
 
       const formatted = celebrities.map(c => ({
-        id: c._id,
+        _id: c._id,
         name: c.name,
         celebrity_type: c.celebrity_type,
         about: c.about,
