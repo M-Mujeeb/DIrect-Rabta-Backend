@@ -6,7 +6,7 @@ const Message = require("../models/Message")
 
 module.exports = {
 
- getAllChatsForFan: async (req, res) => {
+getAllChatsForFan: async (req, res) => {
   try {
     const fanId = req.user.id;
     const BASE_URL = process.env.BASE_URL || "http://localhost:4000";
@@ -25,7 +25,8 @@ module.exports = {
         $group: {
           _id: "$receiver_id",
           lastMessageAt: { $first: "$sent_at" },
-          lastMessageUrl: { $first: "$content" }
+          lastMessageUrl: { $first: "$content" },
+          lastMessageDuration: { $first: "$duration" } 
         }
       },
       {
@@ -51,7 +52,8 @@ module.exports = {
               then: { $concat: [BASE_URL, "$lastMessageUrl"] },
               else: null
             }
-          }
+          },
+          lastMessageDuration: 1 
         }
       },
       { $sort: { lastMessageAt: -1 } }
