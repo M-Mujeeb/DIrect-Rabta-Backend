@@ -42,7 +42,7 @@ module.exports = {
           celebrity_id: "$_id",
           name: "$celebrity.name",
           profile_image: {
-            $concat: [BASE_URL, "/uploads/", "$celebrity.profile_image"]
+            $concat: [BASE_URL, "$celebrity.profile_image"]
           },
           lastMessageAt: 1,
           lastMessageUrl: {
