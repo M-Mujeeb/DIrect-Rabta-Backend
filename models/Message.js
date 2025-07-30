@@ -8,7 +8,9 @@ const MessageSchema = new mongoose.Schema({
   duration: Number,
   sent_at: Date,
   reviewed: Boolean,
-  accepted_policy: Boolean
+  accepted_policy: Boolean,
+  waveform: { type: [Number],default: []},
+  approved: Boolean,
 });
 
 module.exports = mongoose.model("Message", MessageSchema);

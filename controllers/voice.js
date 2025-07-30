@@ -1,3 +1,6 @@
+const { exec } = require("child_process");
+const path = require("path");
+const fs = require("fs");
 const Users = require("../models/User");
 const { successResponse, errorResponse } = require("../utils/response");
 const UserPlan = require("../models/UserPlan");
@@ -66,8 +69,6 @@ getAllChatsForFan: async (req, res) => {
   }
 },
 
-
-
 getMessagesWithCelebrity: async (req, res) => {
   try {
     const fanId = req.user.id;
@@ -89,8 +90,10 @@ getMessagesWithCelebrity: async (req, res) => {
           ? `${BASE_URL}${msg.content}`
           : msg.content,
       duration: msg.duration || 0,
+      waveform: msg.type === "voice" ? msg.waveform || [] : [],
       sent_at: msg.sent_at,
-      isMine: String(msg.sender_id) === String(fanId)
+      isMine: String(msg.sender_id) === String(fanId),
+      approved: msg.approved || false,
     }));
 
     return successResponse(res, "Chat messages fetched", formatted);
@@ -100,20 +103,13 @@ getMessagesWithCelebrity: async (req, res) => {
   }
 },
 
-
-
   sendVoiceMessage: async (req, res) => {
-  try {
+ try {
     const fanId = req.user.id;
     const { celebrityId, duration } = req.body;
 
-    if (!celebrityId) {
-      return errorResponse(res, "Celebrity ID is required", 400);
-    }
-
-    if (!req.file) {
-      return errorResponse(res, "Voice note file is required", 400);
-    }
+    if (!celebrityId) return errorResponse(res, "Celebrity ID is required", 400);
+    if (!req.file) return errorResponse(res, "Voice note file is required", 400);
 
     const fan = await Users.findById(fanId).populate("role_id");
     const celebrity = await Users.findById(celebrityId).populate("role_id");
@@ -126,7 +122,6 @@ getMessagesWithCelebrity: async (req, res) => {
       return errorResponse(res, "Celebrity not found", 404);
     }
 
-    // Validate user's plan
     const userPlan = await UserPlan.findOne({
       user_id: fanId,
       remaining_messages: { $gt: 0 },
@@ -136,26 +131,56 @@ getMessagesWithCelebrity: async (req, res) => {
       return errorResponse(res, "No valid plan or message limit exceeded", 403);
     }
 
-    // Save message to unified `Message` model
-    const newMsg = new Message({
-      sender_id: fanId,
-      receiver_id: celebrityId,
-      type: "voice",
-      content: `/uploads/${req.file.filename}`,
-      duration: Number(duration) || 0,
-      sent_at: new Date(),
-      reviewed: false,
-    });
+    // Local file paths
+    const uploadsFolder = path.resolve(__dirname, "../uploads").replace(/\\/g, "/"); // Make it Docker-safe
+    const fileName = req.file.filename;
+    const audioFile = `/data/${fileName}`;
+    const outputJsonFile = `/data/${fileName}.json`;
+    const localJsonPath = path.join(uploadsFolder, `${fileName}.json`);
 
-    await newMsg.save();
+    const dockerCommand = `docker run --rm -v "${uploadsFolder}:/data" ghcr.io/bbc/audiowaveform -i "${audioFile}" -o "${outputJsonFile}" --pixels-per-second 10 --bits 8`;
 
-    // Decrement user message quota
-    userPlan.remaining_messages -= 1;
-    await userPlan.save();
+    // Run audiowaveform inside Docker
+    exec(dockerCommand, async (err) => {
+      let waveform = [];
 
-    return successResponse(res, "Voice message sent successfully", {
-      voice_url: `${process.env.BASE_URL}/uploads/${req.file.filename}`,
-      remaining_messages: userPlan.remaining_messages,
+      if (err) {
+        console.error("Waveform generation error:", err);
+        // Optional: fallback dummy waveform
+        waveform = Array.from({ length: 100 }, () => Math.floor(Math.random() * 20));
+      } else {
+        try {
+          const jsonData = JSON.parse(fs.readFileSync(localJsonPath, "utf8"));
+          waveform = jsonData.data || [];
+        } catch (jsonErr) {
+          console.error("Error reading waveform JSON:", jsonErr);
+          waveform = [];
+        }
+      }
+
+      // Save the message
+      const newMsg = new Message({
+        sender_id: fanId,
+        receiver_id: celebrityId,
+        type: "voice",
+        content: `/uploads/${fileName}`,
+        duration: Number(duration) || 0,
+        sent_at: new Date(),
+        reviewed: false,
+        waveform,
+        approved:false
+      });
+
+      await newMsg.save();
+
+      userPlan.remaining_messages -= 1;
+      await userPlan.save();
+
+      return successResponse(res, "Voice message sent successfully", {
+        voice_url: `${process.env.BASE_URL}/uploads/${fileName}`,
+        waveform,
+        remaining_messages: userPlan.remaining_messages,
+      });
     });
   } catch (error) {
     console.error("Send Voice Error:", error);
