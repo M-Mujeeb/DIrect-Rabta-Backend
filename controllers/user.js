@@ -113,12 +113,17 @@ module.exports = {
     try {
       const { email, password } = req.body;
 
+
       if (!email || !password) {
         return errorResponse(res, "Please provide email and password", 400);
       }
 
       const user = await Users.findOne({ email }).populate('role_id');
       if (!user) {
+        return errorResponse(res, "Invalid credentials", 401);
+      }
+
+      if (user.role_id.name === "admin") {
         return errorResponse(res, "Invalid credentials", 401);
       }
 

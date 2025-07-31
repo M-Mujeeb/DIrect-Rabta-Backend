@@ -12,6 +12,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
 app.use("/api", Router);
+
 var port = process.env.PORT || 4001;
 var env = process.env.NODE_ENV;
 const startServer = async () => {
