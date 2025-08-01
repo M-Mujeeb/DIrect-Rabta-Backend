@@ -63,7 +63,14 @@ module.exports = {
 
       const fans = await Users.find({ role_id: fanRole._id }).populate("role_id");
 
-      return successResponse(res, "Fans fetched successfully", { users: fans });
+      const baseUrl = process.env.BASE_URL;
+      const updatedFans = fans.map((user) => {
+        return {
+          ...user.toObject(),
+          profile_image: user.profile_image ? baseUrl + user.profile_image : null,
+        };
+      });
+      return successResponse(res, "Fans fetched successfully", { users: updatedFans });
     } catch (error) {
       console.error("Get All Customers Error:", error);
       return errorResponse(res, "Failed to fetch fans", 500);
