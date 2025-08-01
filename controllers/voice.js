@@ -168,7 +168,8 @@ getMessagesWithCelebrity: async (req, res) => {
         sent_at: new Date(),
         reviewed: false,
         waveform,
-        approved:false
+        approved:false,
+        rejected:false
       });
 
       await newMsg.save();

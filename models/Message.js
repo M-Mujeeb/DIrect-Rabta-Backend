@@ -11,6 +11,8 @@ const MessageSchema = new mongoose.Schema({
   accepted_policy: Boolean,
   waveform: { type: [Number],default: []},
   approved: Boolean,
+  rejected: Boolean,
+
 });
 
 module.exports = mongoose.model("Message", MessageSchema);

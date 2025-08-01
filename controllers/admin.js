@@ -4,6 +4,7 @@ const Plans = require("../models/Plan")
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const sendEmail = require("../utils/sendEmail");
+const Messages = require("../models/Message")
 const { generateToken } = require("../utils/jwt");
 const { successResponse, errorResponse } = require("../utils/response");
 
@@ -272,5 +273,89 @@ module.exports = {
       return errorResponse(res, "Failed to delete plan", 500);
     }
   },
+
+  getAllVoiceNotes: async (req, res) => {
+    try {
+      const baseURL = process.env.BASE_URL
+      const formatMessage = (messages) =>
+        messages.map((msg) => ({
+          fan_name: msg.sender_id?.name || "Unknown Fan",
+          celebrity_name: msg.receiver_id?.name || "Unknown Celebrity",
+          sent_at: msg.sent_at ? new Date(msg.sent_at).toLocaleString() : "N/A",
+          voice_note: msg.content ? `${baseURL}${msg.content}` : null
+        }));
+  
+      const [pendingRaw, acceptedRaw, rejectedRaw] = await Promise.all([
+        Messages.find({ type: "voice", approved: false, rejected: false })
+          .populate("sender_id", "name")
+          .populate("receiver_id", "name")
+          .sort({ sent_at: -1 }),
+  
+          Messages.find({ type: "voice", approved: true, rejected: false })
+          .populate("sender_id", "name")
+          .populate("receiver_id", "name")
+          .sort({ sent_at: -1 }),
+  
+          Messages.find({ type: "voice", approved: false, rejected: true })
+          .populate("sender_id", "name")
+          .populate("receiver_id", "name")
+          .sort({ sent_at: -1 }),
+      ]);
+  
+      return successResponse(res, "Voice notes fetched successfully", {
+        pending: formatMessage(pendingRaw),
+        accepted: formatMessage(acceptedRaw),
+        rejected: formatMessage(rejectedRaw),
+      });
+    } catch (error) {
+      console.error("Get Voice Notes Error:", error);
+      return errorResponse(res, "Failed to fetch voice notes", 500);
+    }
+  },
+
+  approveVoiceNote: async (req, res) => {
+    try {
+      const { id } = req.params;
+  
+      const message = await Messages.findById(id);
+      if (!message || message.type !== "voice") {
+        return errorResponse(res, "Voice note not found", 404);
+      }
+  
+      message.approved = true;
+      message.rejected = false; 
+      message.reviewed = true;
+      await message.save();
+  
+      return successResponse(res, "Voice note approved successfully");
+    } catch (error) {
+      console.error("Approve Voice Note Error:", error);
+      return errorResponse(res, "Failed to approve voice note", 500);
+    }
+  },
+
+  rejectVoiceNote: async (req, res) => {
+    try {
+      const { id } = req.params;
+  
+      const message = await Messages.findById(id);
+      if (!message || message.type !== "voice") {
+        return errorResponse(res, "Voice note not found", 404);
+      }
+  
+      message.approved = false;
+      message.rejected = true; 
+      message.reviewed = true;
+      await message.save();
+  
+      return successResponse(res, "Voice note rejected successfully");
+    } catch (error) {
+      console.error("Reject Voice Note Error:", error);
+      return errorResponse(res, "Failed to reject voice note", 500);
+    }
+  },
+  
+  
+  
   
 };

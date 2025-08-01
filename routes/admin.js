@@ -23,6 +23,8 @@ router.post("/plan", authPolicy, controller.addPlan)
 router.put("/plan/:id", authPolicy, controller.updatePlan);
 router.delete("/plan/:id", authPolicy, controller.deletePlan);
 
+router.post("/voice-note/:id/approve", authPolicy, controller.approveVoiceNote);
+router.post("/voice-note/:id/reject", authPolicy, controller.rejectVoiceNote);
 
 
 
