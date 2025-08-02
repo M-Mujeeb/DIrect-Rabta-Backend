@@ -83,10 +83,17 @@ module.exports = {
       if (!celebrityRole) {
         return errorResponse(res, "Celebrity role not found", 404);
       }
+      const baseUrl = process.env.BASE_URL;
+      const celebrities = await Users.find({ role_id: celebrityRole._id }).populate("role_id").sort({ createdAt: -1 });;
 
-      const celebrities = await Users.find({ role_id: celebrityRole._id }).populate("role_id");
+      const updatedCelebrities = celebrities.map((user) => {
+        return {
+          ...user.toObject(),
+          profile_image: user.profile_image ? baseUrl + user.profile_image : null,
+        };
+      });
 
-      return successResponse(res, "Celebrities fetched successfully", { users: celebrities });
+      return successResponse(res, "Celebrities fetched successfully", { users: updatedCelebrities });
     } catch (error) {
       console.error("Get All Customers Error:", error);
       return errorResponse(res, "Failed to fetch fans", 500);
@@ -180,7 +187,10 @@ module.exports = {
       user.updatedAt = new Date();
   
       await user.save();
-      return successResponse(res, "Celebrity updated successfully", user);
+
+      const updatedUser = await Users.findById(id)
+      .select("-password -__v -otp -favorites");
+      return successResponse(res, "Celebrity updated successfully", updatedUser);
     } catch (error) {
       console.error("Update Celebrity Error:", error);
       return errorResponse(res, "Failed to update celebrity", 500);
